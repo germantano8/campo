@@ -1,0 +1,226 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["agricultura"]
+}
+
+// ============================================================================
+// 1. Entidad: TERCEROS (Clientes de servicios y Propietarios de campos)
+// ============================================================================
+model Tercero {
+  id              BigInt   @id @default(autoincrement())
+  nombre          String   @db.VarChar(150)
+  tipoDocumento   String?  @map("tipo_documento") @db.VarChar(20)
+  numeroDocumento String?  @map("numero_documento") @db.VarChar(20)
+  tipo            String   @default("CLIENTE") @db.VarChar(20) // PROPIETARIO, CLIENTE, AMBOS
+  email           String?  @db.VarChar(150)
+  telefono        String?  @db.VarChar(50)
+  cbu             String?  @db.VarChar(50)
+  direccion       String?  @db.Text
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  lotes             Lote[]
+  comprobantes      Comprobante[]
+  movimientosCereal MovimientoCereal[]
+
+  @@map("terceros")
+  @@schema("agricultura")
+}
+
+// ============================================================================
+// 2. Entidad: CULTIVOS
+// ============================================================================
+model Cultivo {
+  id        BigInt   @id @default(autoincrement())
+  nombre    String   @unique(map: "uq_cultivos_nombre") @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  siembras          Siembra[]
+  fumigaciones      Fumigacion[]
+  cosechas          Cosecha[]
+  movimientosCereal MovimientoCereal[]
+
+  @@map("cultivos")
+  @@schema("agricultura")
+}
+
+// ============================================================================
+// 3. Entidad: LOTES (Incluye Tenencia y Propietario)
+// ============================================================================
+model Lote {
+  id                BigInt   @id @default(autoincrement())
+  nombre            String   @unique(map: "uq_lotes_nombre") @db.VarChar(100)
+  hectareas         Decimal  @db.Decimal(10, 2)
+  regimen           String   @default("PROPIO") @db.VarChar(20) // PROPIO, ALQUILADO, SERVICIO_TERCERO
+  propietarioId     BigInt?  @map("propietario_id")
+  modalidadAlquiler String?  @map("modalidad_alquiler") @db.VarChar(20) // PORCENTAJE, QUINTALES_FIJOS
+  valorAlquiler     Decimal? @map("valor_alquiler") @db.Decimal(10, 2)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  propietario Tercero?  @relation(fields: [propietarioId], references: [id], onDelete: SetNull, map: "fk_lotes_propietario")
+  trabajos    Trabajo[]
+
+  @@map("lotes")
+  @@schema("agricultura")
+}
+
+// ============================================================================
+// 4. Entidad: TRABAJOS (Supertype consolidado)
+// ============================================================================
+model Trabajo {
+  id            BigInt   @id @default(autoincrement())
+  loteId        BigInt   @map("lote_id")
+  tipo          String   @db.VarChar(20)
+  fecha         DateTime @db.Date
+  hectareas     Decimal  @db.Decimal(10, 2)
+  observaciones String?  @db.Text
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  lote             Lote             @relation(fields: [loteId], references: [id], onDelete: Restrict, map: "fk_trabajos_lote")
+  siembra          Siembra?
+  fumigacion       Fumigacion?
+  cosecha          Cosecha?
+  comprobantes     Comprobante[]
+  archivosAdjuntos ArchivoAdjunto[]
+
+  @@index([loteId], map: "idx_trabajos_lote_id")
+  @@index([fecha], map: "idx_trabajos_fecha")
+  @@index([tipo], map: "idx_trabajos_tipo")
+  @@map("trabajos")
+  @@schema("agricultura")
+}
+
+// ============================================================================
+// 5. Subtipo: SIEMBRAS
+// ============================================================================
+model Siembra {
+  id              BigInt   @id @default(autoincrement())
+  trabajoId       BigInt   @unique(map: "uq_siembras_trabajo") @map("trabajo_id")
+  cultivoId       BigInt   @map("cultivo_id")
+  variedadSemilla String   @map("variedad_semilla") @db.VarChar(100)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  trabajo Trabajo @relation(fields: [trabajoId], references: [id], onDelete: Cascade, map: "fk_siembras_trabajo")
+  cultivo Cultivo @relation(fields: [cultivoId], references: [id], onDelete: Restrict, map: "fk_siembras_cultivo")
+
+  @@index([cultivoId], map: "idx_siembras_cultivo_id")
+  @@map("siembras")
+  @@schema("agricultura")
+}
+
+// ============================================================================
+// 6. Subtipo: FUMIGACIONES (Simplificada)
+// ============================================================================
+model Fumigacion {
+  id        BigInt   @id @default(autoincrement())
+  trabajoId BigInt   @unique(map: "uq_fumigaciones_trabajo") @map("trabajo_id")
+  cultivoId BigInt?  @map("cultivo_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  trabajo Trabajo  @relation(fields: [trabajoId], references: [id], onDelete: Cascade, map: "fk_fumigaciones_trabajo")
+  cultivo Cultivo? @relation(fields: [cultivoId], references: [id], onDelete: Restrict, map: "fk_fumigaciones_cultivo")
+
+  @@index([cultivoId], map: "idx_fumigaciones_cultivo_id")
+  @@map("fumigaciones")
+  @@schema("agricultura")
+}
+
+// ============================================================================
+// 7. Subtipo: COSECHAS
+// ============================================================================
+model Cosecha {
+  id          BigInt   @id @default(autoincrement())
+  trabajoId   BigInt   @unique(map: "uq_cosechas_trabajo") @map("trabajo_id")
+  cultivoId   BigInt   @map("cultivo_id")
+  rendimiento Decimal  @db.Decimal(10, 2)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  trabajo           Trabajo            @relation(fields: [trabajoId], references: [id], onDelete: Cascade, map: "fk_cosechas_trabajo")
+  cultivo           Cultivo            @relation(fields: [cultivoId], references: [id], onDelete: Restrict, map: "fk_cosechas_cultivo")
+  movimientosCereal MovimientoCereal[]
+
+  @@index([cultivoId], map: "idx_cosechas_cultivo_id")
+  @@map("cosechas")
+  @@schema("agricultura")
+}
+
+// ============================================================================
+// 8. Entidad: COMPROBANTES (Facturas Emitidas y Recibidas)
+// ============================================================================
+model Comprobante {
+  id              BigInt   @id @default(autoincrement())
+  terceroId       BigInt   @map("tercero_id")
+  direccion       String   @db.VarChar(20) // EMITIDA, RECIBIDA
+  tipoComprobante String   @map("tipo_comprobante") @db.VarChar(30) // FACTURA_A, FACTURA_B, FACTURA_C, LIQUIDACION, REMITO
+  fechaEmision    DateTime @map("fecha_emision") @db.Date
+  moneda          String   @default("ARS") @db.VarChar(10)
+  subtotal        Decimal  @db.Decimal(12, 2)
+  iva             Decimal? @db.Decimal(12, 2)
+  total           Decimal  @db.Decimal(12, 2)
+  observaciones   String?  @db.Text
+  trabajoId       BigInt?  @map("trabajo_id")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tercero           Tercero            @relation(fields: [terceroId], references: [id], onDelete: Restrict, map: "fk_comprobantes_tercero")
+  trabajo           Trabajo?           @relation(fields: [trabajoId], references: [id], onDelete: SetNull, map: "fk_comprobantes_trabajo")
+  movimientosCereal MovimientoCereal[]
+  archivosAdjuntos  ArchivoAdjunto[]
+
+  @@index([terceroId], map: "idx_comprobantes_tercero_id")
+  @@map("comprobantes")
+  @@schema("agricultura")
+}
+
+// ============================================================================
+// 9. Entidad: MOVIMIENTOS DE CEREAL (Cuenta Corriente de Granos en Acopio)
+// ============================================================================
+model MovimientoCereal {
+  id            BigInt   @id @default(autoincrement())
+  terceroId     BigInt   @map("tercero_id")
+  cultivoId     BigInt   @map("cultivo_id")
+  tipo          String   @db.VarChar(30) // INGRESO_COSECHA, VENTA_LIQUIDACION, RETIRO_GRANO, AJUSTE
+  cantidadKg    Decimal  @map("cantidad_kg") @db.Decimal(12, 2)
+  cosechaId     BigInt?  @map("cosecha_id")
+  comprobanteId BigInt?  @map("comprobante_id")
+  fecha         DateTime @db.Date
+  observaciones String?  @db.Text
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tercero     Tercero      @relation(fields: [terceroId], references: [id], onDelete: Restrict, map: "fk_movimientos_cereal_tercero")
+  cultivo     Cultivo      @relation(fields: [cultivoId], references: [id], onDelete: Restrict, map: "fk_movimientos_cereal_cultivo")
+  cosecha     Cosecha?     @relation(fields: [cosechaId], references: [id], onDelete: SetNull, map: "fk_movimientos_cereal_cosecha")
+  comprobante Comprobante? @relation(fields: [comprobanteId], references: [id], onDelete: SetNull, map: "fk_movimientos_cereal_comprobante")
+
+  @@index([terceroId], map: "idx_movimientos_cereal_tercero_id")
+  @@index([cultivoId], map: "idx_movimientos_cereal_cultivo_id")
+  @@map("movimientos_cereal")
+  @@schema("agricultura")
+}
+
+// ============================================================================
+// 10. Entidad: ARCHIVOS ADJUNTOS (Azure Blob Storage / Fallback Local)
+// ============================================================================
+model ArchivoAdjunto {
+  id               BigInt   @id @default(autoincrement())
+  nombreOriginal   String   @map("nombre_original") @db.VarChar(255)
+  nombreAlmacenado String   @map("nombre_almacenado") @db.VarChar(255)
+  mimeType         String   @map("mime_type") @db.VarChar(100)
+  storageProvider  String   @map("storage_provider") @db.VarChar(30) // AZURE_BLOB, LOCAL_STORAGE
+  storagePath      String   @map("storage_path") @db.VarChar(500)
+  urlPublica       String?  @map("url_publica") @db.Text
+  comprobanteId    BigInt?  @map("comprobante_id")
+  trabajoId        BigInt?  @map("trabajo_id")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  comprobante Comprobante? @relation(fields: [comprobanteId], references: [id], onDelete: Cascade, map: "fk_archivos_comprobante")
+  trabajo     Trabajo?     @relation(fields: [trabajoId], references: [id], onDelete: Cascade, map: "fk_archivos_trabajo")
+
+  @@index([comprobanteId], map: "idx_archivos_comprobante_id")
+  @@index([trabajoId], map: "idx_archivos_trabajo_id")
+  @@map("archivos_adjuntos")
+  @@schema("agricultura")
+}
