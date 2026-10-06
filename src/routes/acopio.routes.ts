@@ -6,6 +6,8 @@ import { uploadSingleFile } from '../middlewares/upload.middleware';
 const router = Router();
 
 router.get('/resumen', AcopioController.getResumenGlobal);
+router.get('/saldos', AcopioController.getSaldosGlobales);
+router.get('/movimientos', AcopioController.getAllMovimientos);
 router.get('/saldo/:terceroId', AcopioController.getSaldoByTercero);
 router.get('/movimientos/:terceroId', AcopioController.getMovimientosByTercero);
 router.post(

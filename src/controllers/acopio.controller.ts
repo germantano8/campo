@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
+import { StorageService } from '../lib/storage';
 
 export class AcopioController {
   /**
@@ -31,6 +32,80 @@ export class AcopioController {
       });
 
       res.json(resumen);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Obtiene todos los saldos discriminados por productor y cultivo
+   */
+  public static async getSaldosGlobales(
+    _req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const movimientos = await prisma.movimientoCereal.findMany({
+        include: {
+          tercero: { select: { id: true, nombre: true } },
+          cultivo: { select: { id: true, nombre: true } },
+        },
+        orderBy: { fecha: 'asc' },
+      });
+
+      const map = new Map<string, {
+        terceroId: string;
+        terceroNombre: string;
+        cultivoId: string;
+        cultivoNombre: string;
+        saldoKg: number;
+      }>();
+
+      for (const m of movimientos) {
+        const key = `${m.terceroId}-${m.cultivoId}`;
+        const item = map.get(key) || {
+          terceroId: m.terceroId.toString(),
+          terceroNombre: m.tercero.nombre,
+          cultivoId: m.cultivoId.toString(),
+          cultivoNombre: m.cultivo.nombre,
+          saldoKg: 0,
+        };
+        item.saldoKg += Number(m.cantidadKg);
+        map.set(key, item);
+      }
+
+      res.json(Array.from(map.values()));
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Obtiene todos los movimientos con filtros opcionales
+   */
+  public static async getAllMovimientos(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { terceroId, cultivoId } = req.query;
+      const where: any = {};
+      if (terceroId) where.terceroId = BigInt(String(terceroId));
+      if (cultivoId) where.cultivoId = BigInt(String(cultivoId));
+
+      const movimientos = await prisma.movimientoCereal.findMany({
+        where,
+        include: {
+          tercero: true,
+          cultivo: true,
+          comprobante: true,
+        },
+        orderBy: { fecha: 'desc' },
+      });
+
+      res.json(movimientos);
     } catch (error) {
       next(error);
     }
@@ -196,7 +271,7 @@ export class AcopioController {
       const resultado = await prisma.$transaction(async (tx) => {
         let comprobanteCreado = null;
 
-        if (crearComprobante) {
+        if (crearComprobante === true || String(crearComprobante) === 'true') {
           comprobanteCreado = await tx.comprobante.create({
             data: {
               terceroId: BigInt(terceroId),
@@ -208,6 +283,22 @@ export class AcopioController {
               observaciones: observaciones || `Venta de ${kilosAVender} kg de cereal`,
             },
           });
+
+          // Si vino un archivo adjunto (PDF / Imagen de la factura de liquidación)
+          if (req.file) {
+            const uploaded = await StorageService.uploadFile(req.file, 'comprobantes');
+            await tx.archivoAdjunto.create({
+              data: {
+                nombreOriginal: uploaded.nombreOriginal,
+                nombreAlmacenado: uploaded.nombreAlmacenado,
+                mimeType: uploaded.mimeType,
+                storageProvider: uploaded.storageProvider,
+                storagePath: uploaded.storagePath,
+                urlPublica: uploaded.urlPublica || null,
+                comprobanteId: comprobanteCreado.id,
+              },
+            });
+          }
         }
 
         const movimientoEgreso = await tx.movimientoCereal.create({
@@ -224,9 +315,16 @@ export class AcopioController {
           },
         });
 
+        const comprobanteCompleto = comprobanteCreado
+          ? await tx.comprobante.findUnique({
+              where: { id: comprobanteCreado.id },
+              include: { archivosAdjuntos: true },
+            })
+          : null;
+
         return {
           movimiento: movimientoEgreso,
-          comprobante: comprobanteCreado,
+          comprobante: comprobanteCompleto,
         };
       });
 

@@ -17,6 +17,7 @@ Sistema backend profesional desarrollado con **Node.js**, **Express**, **TypeScr
    - [Módulo de Acopio y Cuenta Corriente de Cereal](#módulo-de-acopio-y-cuenta-corriente-de-cereal-apiacopio)
    - [Módulo de Salud del Sistema](#módulo-de-salud-del-sistema-health)
 5. [Variables de Entorno y Configuración](#5-variables-de-entorno-y-configuración)
+6. [Guía Rápida: Cómo Registrar Movimientos de Cereal y Facturas](#6-guía-rápida-cómo-registrar-movimientos-de-cereal-y-facturas)
 
 ---
 
@@ -688,3 +689,80 @@ AZURE_STORAGE_CONTAINER_NAME="archivos-campo"
 * **`npm start`**: Ejecuta la versión compilada en `dist/index.js` para producción.
 * **`npm run prisma:generate`**: Genera el cliente tipado de Prisma.
 * **`npx prisma db push`**: Sincroniza y crea las tablas directamente en PostgreSQL.
+
+---
+
+## 6. Guía Rápida: Cómo Registrar Movimientos de Cereal y Facturas
+
+En la operativa diaria de acopio y ventas con campos alquilados se presentan tres situaciones prácticas:
+
+### Caso 1: Movimiento de cereal SIN factura (Solo kilos de stock)
+> **Cuándo usarlo**: Cosecha que ingresa al acopio/silo, ajuste de balanza, merma por zaranda o cuando el dueño retira cereal en camión (sin dinero de por medio).
+
+* **Método**: `POST`
+* **URL**: `http://localhost:3000/api/acopio/movimiento`
+* **Headers**: `Content-Type: application/json`
+* **Body (JSON)**:
+  ```json
+  {
+    "terceroId": 1,
+    "cultivoId": 1,
+    "tipo": "INGRESO_COSECHA",
+    "cantidadKg": 50000,
+    "fecha": "2026-09-27",
+    "observaciones": "Ingreso a silo 2"
+  }
+  ```
+* **Efecto en el sistema**: Suma o resta kilos en la cuenta corriente de acopio. No genera facturas ni mueve dinero.
+
+---
+
+### Caso 2: Venta de cereal CON factura inmediata (Operación "Todo en Uno")
+> **Cuándo usarlo**: El dueño del campo te solicita la venta de granos y **ya cuentas con el archivo PDF o imagen de la factura**.
+
+* **Método**: `POST`
+* **URL**: `http://localhost:3000/api/acopio/liquidar`
+* **Headers**: `Content-Type: multipart/form-data`
+* **Form-Data**:
+  * `terceroId`: `1` (ID del dueño del campo)
+  * `cultivoId`: `1` (ID del cereal vendido: Soja, Maíz, etc.)
+  * `kilosAVender`: `20000` (Cantidad de kilos a liquidar)
+  * `precioPorKilo`: `320.0` (Precio acordado por kg)
+  * `fecha`: `2026-09-27`
+  * `archivo`: `[Seleccionas Factura_Don_Juan.pdf]` *(archivo adjunto opcional)*
+* **Efecto en el sistema en una sola llamada**:
+  1. Descuenta automáticamente los 20.000 kg del acopio (`VENTA_LIQUIDACION`).
+  2. Genera la factura contable (`RECIBIDA`) por \$6.400.000 vinculada a la venta.
+  3. Sube el PDF a Azure Blob Storage (o `./uploads/`) y lo deja asociado a la factura.
+
+---
+
+### Caso 3: Venta de cereal AHORA, y la factura se sube DESPUÉS
+> **Cuándo usarlo**: El dueño del campo te autoriza la venta hoy (por teléfono o mensaje), pero **te envía la factura días después**.
+
+* **Paso A (Hoy - Registrar la liquidación)**:
+  Envías un JSON estándar sin adjuntar ningún archivo:
+  * **POST** `http://localhost:3000/api/acopio/liquidar`
+  * **Headers**: `Content-Type: application/json`
+  * **Body (JSON)**:
+    ```json
+    {
+      "terceroId": 1,
+      "cultivoId": 1,
+      "kilosAVender": 20000,
+      "precioPorKilo": 320.0,
+      "fecha": "2026-09-27",
+      "crearComprobante": true,
+      "observaciones": "Venta autorizada telefónicamente"
+    }
+    ```
+  * *El sistema descuenta los 20.000 kg de inmediato y genera el comprobante en estado pendiente (por ejemplo con ID `8`), con `archivosAdjuntos: []`.*
+
+* **Paso B (Días después - Subir el comprobante)**:
+  Cuando recibas el PDF o foto de la factura, lo subes utilizando el ID del comprobante creado:
+  * **POST** `http://localhost:3000/api/comprobantes/8/adjuntos`
+  * **Headers**: `Content-Type: multipart/form-data`
+  * **Form-Data**:
+    * `archivo`: `[Seleccionas Factura_Don_Juan.pdf]`
+  * *El archivo queda subido y automáticamente vinculado a esa liquidación histórica.*
+
