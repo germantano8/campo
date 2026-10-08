@@ -1,6 +1,7 @@
 import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { AgroApiService } from '../../services/agro-api.service';
 import { Trabajo, Lote, Cultivo } from '../../models/agro.models';
@@ -8,7 +9,7 @@ import { Trabajo, Lote, Cultivo } from '../../models/agro.models';
 @Component({
   selector: 'app-trabajos',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
     <div class="space-y-6 animate-fade-in">
       <!-- Encabezado de Página -->
@@ -25,36 +26,84 @@ import { Trabajo, Lote, Cultivo } from '../../models/agro.models';
         </button>
       </div>
 
-      <!-- Filtros por Tipo de Labor -->
-      <div class="flex items-center gap-2 overflow-x-auto pb-2">
-        <button
-          (click)="filtrarTipo('')"
-          [class]="filtroActual() === '' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'"
-          class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
-        >
-          Todas ({{ trabajos().length }})
-        </button>
-        <button
-          (click)="filtrarTipo('SIEMBRA')"
-          [class]="filtroActual() === 'SIEMBRA' ? 'bg-green-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'"
-          class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
-        >
-          🌱 Siembras
-        </button>
-        <button
-          (click)="filtrarTipo('FUMIGACION')"
-          [class]="filtroActual() === 'FUMIGACION' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'"
-          class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
-        >
-          🧪 Fumigaciones / Barbecho
-        </button>
-        <button
-          (click)="filtrarTipo('COSECHA')"
-          [class]="filtroActual() === 'COSECHA' ? 'bg-purple-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'"
-          class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
-        >
-          🌾 Cosechas & Rendimiento
-        </button>
+      <!-- Barra de Filtros: Tipo de Labor, Buscador y Rango de Fechas -->
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <!-- Filtros por Tipo de Labor -->
+          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
+            <button
+              (click)="filtrarTipo('')"
+              [class]="filtroActual() === '' ? 'bg-slate-800 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'"
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+            >
+              Todas ({{ trabajos().length }})
+            </button>
+            <button
+              (click)="filtrarTipo('SIEMBRA')"
+              [class]="filtroActual() === 'SIEMBRA' ? 'bg-green-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'"
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+            >
+              🌱 Siembras
+            </button>
+            <button
+              (click)="filtrarTipo('FUMIGACION')"
+              [class]="filtroActual() === 'FUMIGACION' ? 'bg-amber-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'"
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+            >
+              🧪 Fumigaciones
+            </button>
+            <button
+              (click)="filtrarTipo('COSECHA')"
+              [class]="filtroActual() === 'COSECHA' ? 'bg-purple-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'"
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+            >
+              🌾 Cosechas
+            </button>
+          </div>
+
+          <!-- Buscador de Labores y Lotes -->
+          <div class="relative flex-1 max-w-xs">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 text-xs pointer-events-none">🔍</span>
+            <input
+              type="text"
+              [ngModel]="busqueda()"
+              (ngModelChange)="busqueda.set($event)"
+              placeholder="Buscar lote, cultivo, labor, semilla..."
+              class="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-agro-500"
+            />
+          </div>
+        </div>
+
+        <!-- Rango de Fechas de Realización -->
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs text-slate-600">
+          <span class="font-semibold text-slate-400 text-[11px] uppercase tracking-wider">Fecha Labor:</span>
+          <div class="flex items-center gap-1">
+            <label class="text-[11px] text-slate-500">Desde:</label>
+            <input
+              type="date"
+              [ngModel]="fechaDesde()"
+              (ngModelChange)="fechaDesde.set($event)"
+              class="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700"
+            />
+          </div>
+          <div class="flex items-center gap-1">
+            <label class="text-[11px] text-slate-500">Hasta:</label>
+            <input
+              type="date"
+              [ngModel]="fechaHasta()"
+              (ngModelChange)="fechaHasta.set($event)"
+              class="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700"
+            />
+          </div>
+          @if (hayFiltros()) {
+            <button
+              (click)="limpiarFiltros()"
+              class="ml-auto text-xs text-rose-600 hover:text-rose-800 font-semibold inline-flex items-center gap-1 px-2 py-0.5 rounded-md hover:bg-rose-50 transition-colors"
+            >
+              ✕ Limpiar filtros
+            </button>
+          }
+        </div>
       </div>
 
       <!-- Estado de Carga -->
@@ -146,13 +195,23 @@ import { Trabajo, Lote, Cultivo } from '../../models/agro.models';
                       {{ parseNumero(t.hectareas) | number:'1.1-2' }} ha
                     </td>
                     <td class="py-3 text-right whitespace-nowrap">
-                      <button
-                        (click)="eliminarTrabajo(t.id)"
-                        class="text-xs text-slate-400 hover:text-rose-600 font-semibold p-1"
-                        title="Eliminar labor"
-                      >
-                        🗑️
-                      </button>
+                      <div class="inline-flex items-center gap-1.5 justify-end">
+                        <a
+                          [routerLink]="['/comprobantes']"
+                          [queryParams]="{ trabajoId: t.id, terceroId: t.lote?.propietarioId || '' }"
+                          class="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold transition-colors"
+                          title="Emitir factura por esta labor"
+                        >
+                          🧾 Facturar
+                        </a>
+                        <button
+                          (click)="eliminarTrabajo(t.id)"
+                          class="text-xs text-slate-400 hover:text-rose-600 font-semibold p-1"
+                          title="Eliminar labor"
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 }
@@ -330,12 +389,60 @@ export class TrabajosComponent implements OnInit {
   cargando = signal<boolean>(true);
   errorMensaje = signal<string>('');
 
+  busqueda = signal<string>('');
+  fechaDesde = signal<string>('');
+  fechaHasta = signal<string>('');
+
   trabajosFiltrados = computed(() => {
     const f = this.filtroActual();
-    const items = this.trabajos();
-    if (!f) return items;
-    return items.filter((t) => t.tipo === f);
+    const q = this.busqueda().trim().toLowerCase();
+    const dDesde = this.fechaDesde();
+    const dHasta = this.fechaHasta();
+    let items = this.trabajos();
+
+    if (f) {
+      items = items.filter((t) => t.tipo === f);
+    }
+    if (q) {
+      items = items.filter((t) => {
+        const loteNombre = t.lote?.nombre?.toLowerCase() || '';
+        const obs = t.observaciones?.toLowerCase() || '';
+        const tipo = t.tipo.toLowerCase();
+        const siembraCultivo = t.siembra?.cultivo?.nombre?.toLowerCase() || '';
+        const variedad = t.siembra?.variedadSemilla?.toLowerCase() || '';
+        const fumigacionCultivo = t.fumigacion?.cultivo?.nombre?.toLowerCase() || '';
+        const cosechaCultivo = t.cosecha?.cultivo?.nombre?.toLowerCase() || '';
+        return (
+          loteNombre.includes(q) ||
+          obs.includes(q) ||
+          tipo.includes(q) ||
+          siembraCultivo.includes(q) ||
+          variedad.includes(q) ||
+          fumigacionCultivo.includes(q) ||
+          cosechaCultivo.includes(q) ||
+          t.id.includes(q)
+        );
+      });
+    }
+    if (dDesde) {
+      items = items.filter((t) => t.fecha && String(t.fecha).substring(0, 10) >= dDesde);
+    }
+    if (dHasta) {
+      items = items.filter((t) => t.fecha && String(t.fecha).substring(0, 10) <= dHasta);
+    }
+    return items;
   });
+
+  hayFiltros = computed(() => {
+    return !!(this.filtroActual() || this.busqueda() || this.fechaDesde() || this.fechaHasta());
+  });
+
+  limpiarFiltros(): void {
+    this.filtroActual.set('');
+    this.busqueda.set('');
+    this.fechaDesde.set('');
+    this.fechaHasta.set('');
+  }
 
   formTrabajo: any = {
     loteId: '',

@@ -80,22 +80,51 @@ export class ComprobantesController {
         trabajoId,
       } = req.body;
 
-      const comprobante = await prisma.comprobante.create({
-        data: {
-          terceroId: BigInt(terceroId),
-          direccion,
-          tipoComprobante,
-          fechaEmision: new Date(fechaEmision),
-          moneda: moneda || 'ARS',
-          subtotal: subtotal ?? total,
-          iva: iva ?? 0,
-          total,
-          observaciones: observaciones || null,
-          trabajoId: trabajoId ? BigInt(trabajoId) : null,
-        },
-        include: {
-          tercero: true,
-        },
+      const subtotalNum = subtotal !== undefined && subtotal !== null && subtotal !== '' ? Number(subtotal) : Number(total);
+      const ivaNum = iva !== undefined && iva !== null && iva !== '' ? Number(iva) : 0;
+      const totalNum = Number(total);
+
+      const comprobante = await prisma.$transaction(async (tx) => {
+        const nuevo = await tx.comprobante.create({
+          data: {
+            terceroId: BigInt(terceroId),
+            direccion,
+            tipoComprobante,
+            fechaEmision: new Date(fechaEmision),
+            moneda: moneda || 'ARS',
+            subtotal: subtotalNum,
+            iva: ivaNum,
+            total: totalNum,
+            observaciones: observaciones || null,
+            trabajoId: trabajoId && trabajoId !== '' ? BigInt(trabajoId) : null,
+          },
+          include: {
+            tercero: true,
+          },
+        });
+
+        if (req.file) {
+          const uploaded = await StorageService.uploadFile(req.file, 'comprobantes');
+          await tx.archivoAdjunto.create({
+            data: {
+              nombreOriginal: uploaded.nombreOriginal,
+              nombreAlmacenado: uploaded.nombreAlmacenado,
+              mimeType: uploaded.mimeType,
+              storageProvider: uploaded.storageProvider,
+              storagePath: uploaded.storagePath,
+              urlPublica: uploaded.urlPublica || null,
+              comprobanteId: nuevo.id,
+            },
+          });
+        }
+
+        return tx.comprobante.findUnique({
+          where: { id: nuevo.id },
+          include: {
+            tercero: true,
+            archivosAdjuntos: true,
+          },
+        });
       });
 
       res.status(201).json(comprobante);

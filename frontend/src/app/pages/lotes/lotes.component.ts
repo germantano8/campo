@@ -24,36 +24,84 @@ import { Lote, Tercero, Trabajo } from '../../models/agro.models';
         </button>
       </div>
 
-      <!-- Filtros por Régimen -->
-      <div class="flex items-center gap-2 overflow-x-auto pb-2">
-        <button
-          (click)="filtrarRegimen('')"
-          [class]="filtroActual() === '' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'"
-          class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
-        >
-          Todos ({{ lotes().length }})
-        </button>
-        <button
-          (click)="filtrarRegimen('PROPIO')"
-          [class]="filtroActual() === 'PROPIO' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'"
-          class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
-        >
-          🌱 Propios
-        </button>
-        <button
-          (click)="filtrarRegimen('ALQUILADO')"
-          [class]="filtroActual() === 'ALQUILADO' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'"
-          class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
-        >
-          📜 Arrendados / Alquilados
-        </button>
-        <button
-          (click)="filtrarRegimen('SERVICIO_TERCERO')"
-          [class]="filtroActual() === 'SERVICIO_TERCERO' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'"
-          class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
-        >
-          🚜 Servicios a Terceros
-        </button>
+      <!-- Barra de Filtros: Régimen, Buscador y Rango de Fechas -->
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <!-- Filtros por Régimen -->
+          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
+            <button
+              (click)="filtrarRegimen('')"
+              [class]="filtroActual() === '' ? 'bg-slate-800 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'"
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+            >
+              Todos ({{ lotes().length }})
+            </button>
+            <button
+              (click)="filtrarRegimen('PROPIO')"
+              [class]="filtroActual() === 'PROPIO' ? 'bg-emerald-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'"
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+            >
+              🌱 Propios
+            </button>
+            <button
+              (click)="filtrarRegimen('ALQUILADO')"
+              [class]="filtroActual() === 'ALQUILADO' ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'"
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+            >
+              📜 Arrendados
+            </button>
+            <button
+              (click)="filtrarRegimen('SERVICIO_TERCERO')"
+              [class]="filtroActual() === 'SERVICIO_TERCERO' ? 'bg-amber-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'"
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+            >
+              🚜 Servicios
+            </button>
+          </div>
+
+          <!-- Buscador de Lotes -->
+          <div class="relative flex-1 max-w-xs">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 text-xs pointer-events-none">🔍</span>
+            <input
+              type="text"
+              [ngModel]="busqueda()"
+              (ngModelChange)="busqueda.set($event)"
+              placeholder="Buscar lote, parcela, dueño..."
+              class="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-agro-500"
+            />
+          </div>
+        </div>
+
+        <!-- Rango de Fechas de Registro -->
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs text-slate-600">
+          <span class="font-semibold text-slate-400 text-[11px] uppercase tracking-wider">Fecha Registro:</span>
+          <div class="flex items-center gap-1">
+            <label class="text-[11px] text-slate-500">Desde:</label>
+            <input
+              type="date"
+              [ngModel]="fechaDesde()"
+              (ngModelChange)="fechaDesde.set($event)"
+              class="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700"
+            />
+          </div>
+          <div class="flex items-center gap-1">
+            <label class="text-[11px] text-slate-500">Hasta:</label>
+            <input
+              type="date"
+              [ngModel]="fechaHasta()"
+              (ngModelChange)="fechaHasta.set($event)"
+              class="px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700"
+            />
+          </div>
+          @if (hayFiltros()) {
+            <button
+              (click)="limpiarFiltros()"
+              class="ml-auto text-xs text-rose-600 hover:text-rose-800 font-semibold inline-flex items-center gap-1 px-2 py-0.5 rounded-md hover:bg-rose-50 transition-colors"
+            >
+              ✕ Limpiar filtros
+            </button>
+          }
+        </div>
       </div>
 
       <!-- Estado de Carga -->
@@ -351,12 +399,45 @@ export class LotesComponent implements OnInit {
   cargando = signal<boolean>(true);
   errorMensaje = signal<string>('');
 
+  busqueda = signal<string>('');
+  fechaDesde = signal<string>('');
+  fechaHasta = signal<string>('');
+
   lotesFiltrados = computed(() => {
     const f = this.filtroActual();
-    const items = this.lotes();
-    if (!f) return items;
-    return items.filter((l) => l.regimen === f);
+    const q = this.busqueda().trim().toLowerCase();
+    const dDesde = this.fechaDesde();
+    const dHasta = this.fechaHasta();
+    let items = this.lotes();
+
+    if (f) {
+      items = items.filter((l) => l.regimen === f);
+    }
+    if (q) {
+      items = items.filter((l) =>
+        (l.nombre && l.nombre.toLowerCase().includes(q)) ||
+        (l.propietario?.nombre && l.propietario.nombre.toLowerCase().includes(q))
+      );
+    }
+    if (dDesde) {
+      items = items.filter((l: any) => l.createdAt && String(l.createdAt).substring(0, 10) >= dDesde);
+    }
+    if (dHasta) {
+      items = items.filter((l: any) => l.createdAt && String(l.createdAt).substring(0, 10) <= dHasta);
+    }
+    return items;
   });
+
+  hayFiltros = computed(() => {
+    return !!(this.filtroActual() || this.busqueda() || this.fechaDesde() || this.fechaHasta());
+  });
+
+  limpiarFiltros(): void {
+    this.filtroActual.set('');
+    this.busqueda.set('');
+    this.fechaDesde.set('');
+    this.fechaHasta.set('');
+  }
 
   nuevoLote: any = {
     nombre: '',

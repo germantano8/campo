@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
@@ -104,22 +104,95 @@ import { SaldoCereal, MovimientoCereal, Tercero, Cultivo } from '../../models/ag
         </div>
 
         <!-- Historial de Movimientos de Cereal -->
-        <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-          <div class="flex items-center justify-between mb-4">
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <h2 class="text-lg font-bold text-slate-800">Historial de Movimientos</h2>
               <p class="text-xs text-slate-500">Ingresos de cosecha, mermas, retiros y ventas liquidadas</p>
             </div>
-            <span class="text-xs font-bold bg-slate-100 text-slate-600 px-3 py-1 rounded-full">
-              {{ movimientos().length }} movimientos
+            <span class="text-xs font-bold bg-slate-100 text-slate-600 px-3 py-1 rounded-full self-start sm:self-auto">
+              {{ movimientosFiltrados().length }} de {{ movimientos().length }} movimientos
             </span>
           </div>
 
-          @if (movimientos().length === 0) {
+          <!-- Barra de Filtros: Tipo, Buscador y Fechas -->
+          <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2.5">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <!-- Filtro rápido por tipo de movimiento -->
+              <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                <button
+                  (click)="filtroTipo.set('')"
+                  [class]="filtroTipo() === '' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'"
+                  class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+                >
+                  Todos
+                </button>
+                <button
+                  (click)="filtroTipo.set('INGRESO_COSECHA')"
+                  [class]="filtroTipo() === 'INGRESO_COSECHA' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'"
+                  class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+                >
+                  📥 Ingresos
+                </button>
+                <button
+                  (click)="filtroTipo.set('VENTA_LIQUIDACION')"
+                  [class]="filtroTipo() === 'VENTA_LIQUIDACION' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'"
+                  class="px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
+                >
+                  💰 Liquidaciones
+                </button>
+              </div>
+
+              <!-- Buscador -->
+              <div class="relative flex-1 max-w-xs">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-2.5 text-slate-400 text-xs pointer-events-none">🔍</span>
+                <input
+                  type="text"
+                  [ngModel]="busqueda()"
+                  (ngModelChange)="busqueda.set($event)"
+                  placeholder="Buscar por lote, productor, cultivo, factura..."
+                  class="w-full pl-7 pr-3 py-1 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-agro-500"
+                />
+              </div>
+            </div>
+
+            <!-- Rango de Fechas -->
+            <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/60 text-xs text-slate-600">
+              <span class="font-semibold text-slate-400 text-[11px] uppercase tracking-wider">Fecha:</span>
+              <div class="flex items-center gap-1">
+                <label class="text-[11px] text-slate-500">Desde:</label>
+                <input
+                  type="date"
+                  [ngModel]="fechaDesde()"
+                  (ngModelChange)="fechaDesde.set($event)"
+                  class="px-2 py-0.5 bg-white border border-slate-200 rounded-md text-xs text-slate-700"
+                />
+              </div>
+              <div class="flex items-center gap-1">
+                <label class="text-[11px] text-slate-500">Hasta:</label>
+                <input
+                  type="date"
+                  [ngModel]="fechaHasta()"
+                  (ngModelChange)="fechaHasta.set($event)"
+                  class="px-2 py-0.5 bg-white border border-slate-200 rounded-md text-xs text-slate-700"
+                />
+              </div>
+              @if (hayFiltros()) {
+                <button
+                  (click)="limpiarFiltros()"
+                  class="ml-auto text-xs text-rose-600 hover:text-rose-800 font-semibold inline-flex items-center gap-1 px-2 py-0.5 rounded-md hover:bg-rose-50 transition-colors"
+                >
+                  ✕ Limpiar filtros
+                </button>
+              }
+            </div>
+          </div>
+
+          @if (movimientosFiltrados().length === 0) {
             <div class="text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-200">
               <span class="text-3xl">📋</span>
-              <p class="mt-2 text-sm font-semibold text-slate-700">No hay movimientos registrados</p>
-              <p class="text-xs text-slate-400 mt-1">Registra un movimiento de stock o una cosecha para comenzar.</p>
+              <p class="mt-2 text-sm font-semibold text-slate-700">No se encontraron movimientos</p>
+              <p class="text-xs text-slate-400 mt-1">No hay registros que coincidan con los filtros aplicados.</p>
             </div>
           } @else {
             <div class="overflow-x-auto">
@@ -135,7 +208,7 @@ import { SaldoCereal, MovimientoCereal, Tercero, Cultivo } from '../../models/ag
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
-                  @for (m of movimientos(); track m.id) {
+                  @for (m of movimientosFiltrados(); track m.id) {
                     <tr class="hover:bg-slate-50/80 transition-colors">
                       <td class="py-3 text-xs font-medium text-slate-500 whitespace-nowrap">
                         {{ m.fecha | date:'dd/MM/yyyy' }}
@@ -170,6 +243,11 @@ import { SaldoCereal, MovimientoCereal, Tercero, Cultivo } from '../../models/ag
                       </td>
                       <td class="py-3 text-xs text-slate-500">
                         {{ m.observaciones || '-' }}
+                        @if ($any(m).cosecha?.trabajo?.lote?.nombre) {
+                          <span class="ml-1 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[10px] font-bold border border-emerald-200 inline-block">
+                            🌾 {{ $any(m).cosecha?.trabajo?.lote?.nombre }}
+                          </span>
+                        }
                         @if (m.comprobanteId) {
                           <span class="ml-1 px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-bold border border-blue-200 inline-block">
                             Factura #{{ m.comprobanteId }}
@@ -418,6 +496,61 @@ export class AcopioComponent implements OnInit {
 
   cargando = signal<boolean>(true);
   errorMensaje = signal<string>('');
+
+  busqueda = signal<string>('');
+  fechaDesde = signal<string>('');
+  fechaHasta = signal<string>('');
+  filtroTipo = signal<string>('');
+
+  movimientosFiltrados = computed(() => {
+    const q = this.busqueda().trim().toLowerCase();
+    const dDesde = this.fechaDesde();
+    const dHasta = this.fechaHasta();
+    const tipo = this.filtroTipo();
+    let items = this.movimientos();
+
+    if (tipo) {
+      items = items.filter((m) => m.tipo === tipo);
+    }
+    if (q) {
+      items = items.filter((m) => {
+        const tercero = m.tercero?.nombre?.toLowerCase() || '';
+        const cultivo = m.cultivo?.nombre?.toLowerCase() || '';
+        const obs = m.observaciones?.toLowerCase() || '';
+        const t = m.tipo.toLowerCase();
+        const kg = String(m.cantidadKg);
+        const compId = m.comprobanteId ? String(m.comprobanteId) : '';
+        const lote = (m as any).cosecha?.trabajo?.lote?.nombre?.toLowerCase() || '';
+        return (
+          lote.includes(q) ||
+          tercero.includes(q) ||
+          cultivo.includes(q) ||
+          obs.includes(q) ||
+          t.includes(q) ||
+          kg.includes(q) ||
+          compId.includes(q)
+        );
+      });
+    }
+    if (dDesde) {
+      items = items.filter((m) => m.fecha && String(m.fecha).substring(0, 10) >= dDesde);
+    }
+    if (dHasta) {
+      items = items.filter((m) => m.fecha && String(m.fecha).substring(0, 10) <= dHasta);
+    }
+    return items;
+  });
+
+  hayFiltros = computed(() => {
+    return !!(this.busqueda() || this.fechaDesde() || this.fechaHasta() || this.filtroTipo());
+  });
+
+  limpiarFiltros(): void {
+    this.busqueda.set('');
+    this.fechaDesde.set('');
+    this.fechaHasta.set('');
+    this.filtroTipo.set('');
+  }
 
   mostrarModalLiquidar = signal<boolean>(false);
   mostrarModalMovimiento = signal<boolean>(false);
