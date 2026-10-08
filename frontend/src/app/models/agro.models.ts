@@ -68,6 +68,11 @@ export interface MovimientoCereal {
   tercero?: Tercero;
   cultivo?: Cultivo;
   comprobanteId?: string;
+  cosechaId?: string;
+  cosecha?: {
+    id: string;
+    trabajo?: Trabajo;
+  };
 }
 
 export interface SaldoCereal {
@@ -99,6 +104,8 @@ export interface Comprobante {
   iva?: number | string;
   total: number | string;
   observaciones?: string;
+  trabajoId?: string;
+  trabajo?: Trabajo;
   tercero?: Tercero;
   archivosAdjuntos?: ArchivoAdjunto[];
 }

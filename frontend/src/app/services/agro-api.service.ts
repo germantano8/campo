@@ -107,6 +107,10 @@ export class AgroApiService {
     return this.http.get<Comprobante[]>(`${this.baseUrl}/comprobantes`, { params });
   }
 
+  createComprobante(data: FormData | any): Observable<Comprobante> {
+    return this.http.post<Comprobante>(`${this.baseUrl}/comprobantes`, data);
+  }
+
   subirAdjuntoComprobante(comprobanteId: string, file: File): Observable<ArchivoAdjunto> {
     const formData = new FormData();
     formData.append('archivo', file);
