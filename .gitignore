@@ -1,0 +1,16 @@
+# Raíz
+node_modules/
+dist/
+.env
+*.log
+
+# Backend
+backend/dist/
+backend/node_modules/
+backend/.env
+backend/uploads/
+
+# Frontend
+frontend/dist/
+frontend/node_modules/
+frontend/.angular/

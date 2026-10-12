@@ -1,7 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { BlobServiceClient } from '@azure/storage-blob';
+import {
+  BlobServiceClient,
+  generateBlobSASQueryParameters,
+  BlobSASPermissions,
+  StorageSharedKeyCredential,
+} from '@azure/storage-blob';
 import multer from 'multer';
 
 export interface UploadedFileResult {
@@ -44,33 +49,60 @@ export class StorageService {
     const azureClient = this.getAzureClient();
 
     if (azureClient) {
-      // Subida a Azure Blob Storage
-      const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'archivos-campo';
-      const containerClient = azureClient.getContainerClient(containerName);
+      try {
+        // Subida a Azure Blob Storage
+        const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'archivos-campo';
+        const containerClient = azureClient.getContainerClient(containerName);
 
-      // Crear contenedor si no existe
-      await containerClient.createIfNotExists({ access: 'blob' });
+        // Crear contenedor si no existe (sin forzar access: 'blob' que falla cuando la cuenta no permite acceso anónimo)
+        try {
+          await containerClient.createIfNotExists();
+        } catch {
+          // Ignorar si el contenedor ya existe o no hay permiso de creación
+        }
 
-      const blobName = `${folder}/${nombreAlmacenado}`;
-      const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+        const blobName = `${folder}/${nombreAlmacenado}`;
+        const blockBlobClient = containerClient.getBlockBlobClient(blobName);
 
-      await blockBlobClient.uploadData(file.buffer, {
-        blobHTTPHeaders: {
-          blobContentType: file.mimetype,
-        },
-      });
+        await blockBlobClient.uploadData(file.buffer, {
+          blobHTTPHeaders: {
+            blobContentType: file.mimetype,
+          },
+        });
 
-      return {
-        nombreOriginal: file.originalname,
-        nombreAlmacenado,
-        mimeType: file.mimetype,
-        storageProvider: 'AZURE_BLOB',
-        storagePath: blobName,
-        urlPublica: blockBlobClient.url,
-      };
-    } else {
-      // Fallback a almacenamiento local en disco
-      if (!fs.existsSync(this.localUploadDir)) {
+        // Generar URL con SAS token de lectura para permitir visualización de archivos en cuentas privadas
+        let urlPublica = blockBlobClient.url;
+        if (azureClient.credential instanceof StorageSharedKeyCredential) {
+          const sas = generateBlobSASQueryParameters(
+            {
+              containerName,
+              blobName,
+              permissions: BlobSASPermissions.parse('r'),
+              startsOn: new Date(Date.now() - 5 * 60 * 1000), // Prevenir desfasaje horario
+              expiresOn: new Date(Date.now() + 1000 * 60 * 60 * 24 * 365), // Válido por 1 año
+            },
+            azureClient.credential
+          );
+          urlPublica = `${blockBlobClient.url}?${sas.toString()}`;
+        }
+
+        console.log(`[StorageService] Archivo subido con éxito a Azure Blob Storage: ${blobName}`);
+
+        return {
+          nombreOriginal: file.originalname,
+          nombreAlmacenado,
+          mimeType: file.mimetype,
+          storageProvider: 'AZURE_BLOB',
+          storagePath: blobName,
+          urlPublica,
+        };
+      } catch (azureError) {
+        console.error('[StorageService] Error subiendo a Azure Blob Storage. Se usará almacenamiento local:', azureError);
+      }
+    }
+
+    // Fallback a almacenamiento local en disco
+    if (!fs.existsSync(this.localUploadDir)) {
         fs.mkdirSync(this.localUploadDir, { recursive: true });
       }
 
@@ -93,7 +125,6 @@ export class StorageService {
         urlPublica: `/${relativePath}`,
       };
     }
-  }
 
   /**
    * Elimina un archivo del storage correspondiente
