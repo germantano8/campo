@@ -1,0 +1,72 @@
+services:
+  # ==============================================================================
+  # 1. Base de Datos: PostgreSQL 16
+  # ==============================================================================
+  db:
+    image: postgres:16-alpine
+    container_name: campo_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres123}
+      POSTGRES_DB: ${DB_NAME:-campo}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-campo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - campo_net
+
+  # ==============================================================================
+  # 2. Servidor de Aplicación: Node.js / Express / Prisma
+  # ==============================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: campo_backend
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres123}@db:5432/${DB_NAME:-campo}?schema=agricultura
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING:-}
+      AZURE_STORAGE_CONTAINER_NAME: ${AZURE_STORAGE_CONTAINER_NAME:-archivos-campo}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - backend_uploads:/app/uploads
+    networks:
+      - campo_net
+
+  # ==============================================================================
+  # 3. Servidor Web & Reverse Proxy: Nginx + Angular 19
+  # ==============================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: campo_frontend
+    restart: unless-stopped
+    ports:
+      - "${PORT_HTTP:-80}:80"
+    depends_on:
+      - backend
+    networks:
+      - campo_net
+
+volumes:
+  postgres_data:
+    driver: local
+  backend_uploads:
+    driver: local
+
+networks:
+  campo_net:
+    driver: bridge

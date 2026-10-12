@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { AgroApiService } from '../../services/agro-api.service';
 import { Comprobante, Tercero, Trabajo } from '../../models/agro.models';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-comprobantes',
@@ -629,6 +630,9 @@ export class ComprobantesComponent implements OnInit {
     if (!rawPath) return '#';
     if (rawPath.startsWith('http')) return rawPath;
     const cleanPath = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+    if (environment.production) {
+      return cleanPath;
+    }
     return `http://localhost:3000${cleanPath}`;
   }
 
