@@ -1,0 +1,37 @@
+name: CI/CD - Deploy a Azure VM
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Desplegar en VM con Docker Compose
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ejecutar despliegue remoto por SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+            echo "📂 Entrando al directorio del proyecto..."
+            cd ${{ secrets.VM_PROJECT_PATH }}
+
+            echo "⬇️ Descargando últimos cambios de main..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "🐳 Reconstruyendo y levantando contenedores..."
+            docker compose up -d --build --remove-orphans
+
+            echo "🧹 Limpiando imágenes antiguas sin uso..."
+            docker image prune -f
+
+            echo "✅ ¡Despliegue completado con éxito!"
+
